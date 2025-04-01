@@ -16,6 +16,7 @@ enum NotificationType {
   CONSENT_REQUEST
   CONSENT_ACCEPTED
   CONSENT_REFUSED
+  BIOMETRIC_CONFIRMATION // Ajouté
   SYSTEM
 }
 
@@ -77,7 +78,7 @@ model Consent {
   paymentStatus        PaymentStatus  @default(PENDING)
   initiatorConfirmed   Boolean        @default(false)
   partnerConfirmed     Boolean        @default(false)
-  biometricValidated   Boolean?       // Indique si la validation biométrique a été effectuée
+  biometricValidated   Boolean        @default(false) // Changé de Boolean? à Boolean
   biometricValidatedAt DateTime?      // Horodatage de la validation biométrique
   deletedByInitiator   Boolean        @default(false) // Soft-delete pour X
   deletedByPartner     Boolean        @default(false) // Soft-delete pour Y

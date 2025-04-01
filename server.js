@@ -344,6 +344,69 @@ app.put('/api/consent/:id/refuse-partner', authenticateToken, async (req, res) =
   }
 });
 
+
+// Ajouter cette route après les routes existantes pour accepter/refuser
+// /ConsentApp/app-backend/server.js
+app.put('/api/consent/:id/confirm-biometric', authenticateToken, async (req, res) => {
+  try {
+    const consentId = parseInt(req.params.id, 10);
+    const { userId } = req.body;
+
+    const consent = await prisma.consent.findUnique({
+      where: { id: consentId },
+      select: { userId: true, partnerId: true, initiatorConfirmed: true, partnerConfirmed: true, biometricValidated: true },
+    });
+
+    if (!consent) {
+      return res.status(404).json({ message: 'Consentement non trouvé' });
+    }
+
+    const isInitiator = consent.userId === userId;
+    const isPartner = consent.partnerId === userId;
+
+    if (!isInitiator && !isPartner) {
+      return res.status(403).json({ message: 'Action non autorisée' });
+    }
+
+    const updateData = {};
+    if (isInitiator) {
+      updateData.initiatorConfirmed = true;
+    } else if (isPartner) {
+      updateData.partnerConfirmed = true;
+    }
+
+    // Si les deux parties ont confirmé, marquer la validation biométrique comme complète
+    const bothConfirmed = (isInitiator && consent.partnerConfirmed) || (isPartner && consent.initiatorConfirmed);
+    if (bothConfirmed) {
+      updateData.biometricValidated = true;
+      updateData.biometricValidatedAt = new Date();
+    }
+
+    const updatedConsent = await prisma.consent.update({
+      where: { id: consentId },
+      data: updateData,
+    });
+
+    // Créer une notification pour l’autre partie
+    const recipientId = isInitiator ? consent.partnerId : consent.userId;
+    const senderRole = isInitiator ? 'l’initiateur' : 'le partenaire';
+    await prisma.notification.create({
+      data: {
+        userId: recipientId,
+        type: 'BIOMETRIC_CONFIRMATION',
+        message: `${senderRole} a validé le consentement #${consentId} par biométrie.`,
+        consentId: consentId,
+        isRead: false,
+      },
+    });
+
+    res.json({ message: 'Validation biométrique enregistrée' });
+  } catch (error) {
+    console.error('Erreur confirm-biometric:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
 // Routes pour les notifications
 app.get('/api/notifications/unread', authenticateToken, async (req, res) => {
   try {
