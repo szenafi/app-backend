@@ -1,0 +1,29 @@
+{
+  "name": "consent-app-backend",
+  "version": "1.0.0",
+  "description": "Backend pour l'application de consentement mutuel",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --max-old-space-size=4096 server.js",
+    "dev": "nodemon --max-old-space-size=4096 server.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.5.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "crypto-js": "^4.2.0",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "helmet": "^6.0.1",
+    "joi": "^17.13.3",
+    "jsonwebtoken": "^9.0.0",
+    "stripe": "^11.14.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22",
+    "prisma": "^6.5.0"
+  },
+  "license": "ISC",
+  "private": true
+}
