@@ -20,7 +20,8 @@ const prisma = new PrismaClient({
 
 // Configuration CORS pour Railway
 app.use(cors({
-  origin: ['https://*.expo.dev', 'exp://192.168.95.14:8081', 'http://localhost:8081'],
+  origin: '*', // Autorise toutes les origines pour les tests
+  // origin: ['https://*.expo.dev', 'exp://192.168.95.14:8081', 'http://localhost:8081'],
   credentials: true,
 }));
 
@@ -142,20 +143,37 @@ app.post('/api/auth/signup', validate(signupSchema), async (req, res) => {
   }
 });
 
+// /ConsentApp/app-backend/server.js
+// ... (autres imports et configurations)
+
+// Route pour gérer la connexion
 app.post('/api/auth/login', validate(loginSchema), async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await prisma.user.findUnique({ where: { email }, select: { id: true, email: true, password: true, firstName: true, lastName: true } });
-    if (!user || !(await bcrypt.compare(password, user.password))) {
+    console.log('Tentative de login avec :', { email, password });
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, password: true, firstName: true, lastName: true },
+    });
+    if (!user) {
+      console.log('Utilisateur non trouvé :', email);
+      return res.status(400).json({ message: 'Email ou mot de passe incorrect' });
+    }
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) {
+      console.log('Mot de passe incorrect pour :', email);
       return res.status(400).json({ message: 'Email ou mot de passe incorrect' });
     }
     const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    console.log('Login réussi pour :', email, 'Token généré :', token);
     res.json({ token, user: { id: user.id, email: user.email, firstName: user.firstName ?? '', lastName: user.lastName ?? '' } });
   } catch (error) {
-    console.error('Erreur login:', error);
+    console.error('Erreur lors de la connexion :', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
+
+// ... (reste du fichier)
 
 // Route pour récupérer les informations utilisateur
 app.get('/api/user/info', authenticateToken, async (req, res) => {
