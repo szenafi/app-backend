@@ -1,3 +1,4 @@
+// /ConsentApp/app-backend/server.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -49,7 +50,22 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         console.error('Metadata invalide:', paymentIntent.metadata);
         return res.status(400).json({ message: 'Metadata invalide' });
       }
-      
+
+      // Mise à jour du packQuantity après un paiement réussi
+      const updatedPack = await prisma.$transaction(async (tx) => {
+        const pack = await tx.packConsentement.findUnique({ where: { userId } });
+        if (pack) {
+          return await tx.packConsentement.update({
+            where: { userId },
+            data: { quantity: pack.quantity + quantity, purchasedAt: new Date() },
+          });
+        } else {
+          return await tx.packConsentement.create({
+            data: { userId, quantity, purchasedAt: new Date() },
+          });
+        }
+      });
+      console.log(`Pack mis à jour pour userId ${userId} après paiement:`, updatedPack);
     }
     res.json({ received: true });
   } catch (error) {
@@ -143,10 +159,6 @@ app.post('/api/auth/signup', validate(signupSchema), async (req, res) => {
   }
 });
 
-// /ConsentApp/app-backend/server.js
-// ... (autres imports et configurations)
-
-// Route pour gérer la connexion
 app.post('/api/auth/login', validate(loginSchema), async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -172,8 +184,6 @@ app.post('/api/auth/login', validate(loginSchema), async (req, res) => {
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
-
-// ... (reste du fichier)
 
 // Route pour récupérer les informations utilisateur
 app.get('/api/user/info', authenticateToken, async (req, res) => {
@@ -269,7 +279,7 @@ app.post('/api/consent', authenticateToken, validate(consentSchema), async (req,
   }
 });
 
-// Route d'historique des consentements et +++++
+// Route d'historique des consentements
 app.get('/api/consent/history', authenticateToken, async (req, res) => {
   try {
     const skip = parseInt(req.query.skip, 10) || 0;
@@ -362,9 +372,6 @@ app.put('/api/consent/:id/refuse-partner', authenticateToken, async (req, res) =
   }
 });
 
-
-// Ajouter cette route après les routes existantes pour accepter/refuser
-// /ConsentApp/app-backend/server.js
 app.put('/api/consent/:id/confirm-biometric', authenticateToken, async (req, res) => {
   try {
     const consentId = parseInt(req.params.id, 10);
@@ -450,6 +457,29 @@ app.put('/api/notifications/mark-as-read', authenticateToken, async (req, res) =
     res.json({ message: 'Notifications marquées comme lues' });
   } catch (error) {
     console.error('Erreur mark notifications:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// Nouvelle route pour marquer les notifications comme lues (correspond à l’appel dans utils/api.js)
+app.put('/api/notifications/mark-read', authenticateToken, async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'Liste d’IDs de notifications invalide' });
+    }
+    await prisma.notification.updateMany({
+      where: {
+        id: { in: ids },
+        userId: req.user.id,
+      },
+      data: {
+        isRead: true,
+      },
+    });
+    res.json({ message: 'Notifications marquées comme lues' });
+  } catch (error) {
+    console.error('Erreur lors du marquage des notifications comme lues :', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
