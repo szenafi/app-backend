@@ -103,7 +103,10 @@ const loginSchema = z.object({
 });
 const consentSchema = z.object({
   partnerEmail: z.string().email(),
-  consentData: z.object({ message: z.string() }),
+  consentData: z.object({
+    message: z.string(),
+    dateTime: z.string().optional(),
+  }),
 });
 const packPaymentSchema = z.object({
   quantity: z.number().int().positive(),
