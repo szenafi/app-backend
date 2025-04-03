@@ -105,7 +105,7 @@ const consentSchema = z.object({
   partnerEmail: z.string().email(),
   consentData: z.object({
     message: z.string(),
-    dateTime: z.string().optional(),
+    dateTime: z.string().optional().nullable(), // Accepte null ou une string
   }),
 });
 const packPaymentSchema = z.object({
