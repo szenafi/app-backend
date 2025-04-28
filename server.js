@@ -267,11 +267,11 @@ app.post('/api/consent', authenticateToken, validate(consentSchema), async (req,
         data: {
           userId: req.user.id,
           partnerId: partner.id,
-          data: encryptedData,
+          encryptedData: encryptedData, // Correction ici !
           status: 'PENDING',
           paymentStatus,
           message: consentData.message,
-          createdAt: consentData.dateTime ? new Date(consentData.dateTime) : new Date(),
+          createdAt: new Date(), // Horodatage automatique
           emoji: consentData.emoji || null,
           type: consentData.type || null,
         },
@@ -293,37 +293,39 @@ app.post('/api/consent', authenticateToken, validate(consentSchema), async (req,
   }
 });
 
-// Route d'historique des consentements
+// Nouvelle route : historique des consentements pour l'utilisateur connecté
 app.get('/api/consent/history', authenticateToken, async (req, res) => {
   try {
-    const skip = parseInt(req.query.skip, 10) || 0;
-    const take = parseInt(req.query.take, 10) || 10;
-    const status = req.query.status?.toUpperCase() || 'ALL';
-
-    const where = {
-      OR: [{ userId: req.user.id }, { partnerId: req.user.id }],
-      ...(status !== 'ALL' && { status }),
-    };
-
     const consents = await prisma.consent.findMany({
-      where,
-      skip,
-      take,
+      where: {
+        OR: [
+          { userId: req.user.id },
+          { partnerId: req.user.id },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
       select: {
-        id: true, status: true, paymentStatus: true, userId: true, partnerId: true,
-        initiatorConfirmed: true, partnerConfirmed: true, biometricValidated: true,
-        biometricValidatedAt: true, deletedByInitiator: true, deletedByPartner: true,
-        archived: true, createdAt: true, encryptedData: true,
-        user: { select: { id: true, firstName: true, lastName: true, photoUrl: true } },
-        partner: { select: { id: true, firstName: true, lastName: true, photoUrl: true } },
+        id: true,
+        createdAt: true,
+        status: true,
+        userId: true,
+        partnerId: true,
+        message: true,
+        encryptedData: true,
+        partner: { select: { firstName: true, lastName: true, email: true } },
       },
     });
-
-    res.json({ consents });
+    const result = consents.map(c => ({
+      id: c.id,
+      createdAt: c.createdAt,
+      status: c.status,
+      partnerName: c.partner?.firstName ? c.partner.firstName + ' ' + (c.partner.lastName || '') : '',
+      partnerEmail: c.partner?.email || '',
+      message: c.message,
+    }));
+    res.json(result);
   } catch (error) {
-    console.error('Erreur history:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+    res.status(500).json({ message: 'Erreur lors de la récupération de l\'historique', error: error.message });
   }
 });
 
