@@ -312,20 +312,13 @@ app.get('/api/consent/history', authenticateToken, async (req, res) => {
         partnerId: true,
         message: true,
         encryptedData: true,
-        partner: { select: { firstName: true, lastName: true, email: true } },
+        user: { select: { firstName: true, lastName: true, email: true, photoUrl: true } },
+        partner: { select: { firstName: true, lastName: true, email: true, photoUrl: true } },
       },
     });
-    const result = consents.map(c => ({
-      id: c.id,
-      createdAt: c.createdAt,
-      status: c.status,
-      partnerName: c.partner?.firstName ? c.partner.firstName + ' ' + (c.partner.lastName || '') : '',
-      partnerEmail: c.partner?.email || '',
-      message: c.message,
-    }));
-    res.json(result);
+    res.json(consents);
   } catch (error) {
-    res.status(500).json({ message: 'Erreur lors de la récupération de l\'historique', error: error.message });
+    res.status(500).json({ message: "Erreur lors de la récupération de l'historique", error: error.message });
   }
 });
 
