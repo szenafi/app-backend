@@ -238,7 +238,7 @@ app.get('/api/user/contacts', authenticateToken, async (req, res) => {
   }
 });
 
-// Route pour créer un consentement
+// Route pour créer un consentement (sécurisée et champs forcés)
 app.post('/api/consent', authenticateToken, validate(consentSchema), async (req, res) => {
   try {
     const { partnerEmail, consentData } = req.body;
@@ -267,13 +267,13 @@ app.post('/api/consent', authenticateToken, validate(consentSchema), async (req,
         data: {
           userId: req.user.id,
           partnerId: partner.id,
-          encryptedData: encryptedData, // Correction ici !
+          encryptedData: encryptedData,
           status: 'PENDING',
           paymentStatus,
-          message: consentData.message,
-          createdAt: new Date(), // Horodatage automatique
-          emoji: consentData.emoji || null,
-          type: consentData.type || null,
+          message: typeof consentData.message === 'string' ? consentData.message : '',
+          createdAt: new Date(),
+          emoji: typeof consentData.emoji === 'string' ? consentData.emoji : '',
+          type: typeof consentData.type === 'string' ? consentData.type : '',
         },
       });
     });
@@ -300,8 +300,9 @@ app.get('/api/consent/history', authenticateToken, async (req, res) => {
       where: {
         OR: [
           { userId: req.user.id },
-          { partnerId: req.user.id },
+          { partnerId: req.user.id }
         ],
+        deletedByInitiator: false,
       },
       orderBy: { createdAt: 'desc' },
       select: {
@@ -311,12 +312,37 @@ app.get('/api/consent/history', authenticateToken, async (req, res) => {
         userId: true,
         partnerId: true,
         message: true,
-        encryptedData: true,
+        emoji: true,
+        type: true,
+        // encryptedData: true, // Ne pas exposer
         user: { select: { firstName: true, lastName: true, email: true, photoUrl: true } },
         partner: { select: { firstName: true, lastName: true, email: true, photoUrl: true } },
       },
     });
-    res.json(consents);
+
+    // Sécurisation des champs dynamiques
+    const safeConsents = consents.map(c => ({
+      ...c,
+      message: typeof c.message === 'string' ? c.message : '',
+      emoji: typeof c.emoji === 'string' ? c.emoji : '',
+      type: typeof c.type === 'string' ? c.type : '',
+      user: {
+        ...c.user,
+        firstName: typeof c.user?.firstName === 'string' ? c.user.firstName : '',
+        lastName: typeof c.user?.lastName === 'string' ? c.user.lastName : '',
+        email: typeof c.user?.email === 'string' ? c.user.email : '',
+        photoUrl: typeof c.user?.photoUrl === 'string' ? c.user.photoUrl : '',
+      },
+      partner: {
+        ...c.partner,
+        firstName: typeof c.partner?.firstName === 'string' ? c.partner.firstName : '',
+        lastName: typeof c.partner?.lastName === 'string' ? c.partner.lastName : '',
+        email: typeof c.partner?.email === 'string' ? c.partner.email : '',
+        photoUrl: typeof c.partner?.photoUrl === 'string' ? c.partner.photoUrl : '',
+      }
+    }));
+
+    res.json(safeConsents);
   } catch (error) {
     res.status(500).json({ message: "Erreur lors de la récupération de l'historique", error: error.message });
   }
@@ -449,7 +475,13 @@ app.get('/api/notifications/unread', authenticateToken, async (req, res) => {
       orderBy: { createdAt: 'desc' },
       select: { id: true, type: true, message: true, consentId: true, isRead: true, createdAt: true },
     });
-    res.json(notifications);
+    // Sécurisation des champs dynamiques
+    const safeNotifications = notifications.map(n => ({
+      ...n,
+      type: typeof n.type === 'string' ? n.type : '',
+      message: typeof n.message === 'string' ? n.message : '',
+    }));
+    res.json(safeNotifications);
   } catch (error) {
     console.error('Erreur notifications:', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
