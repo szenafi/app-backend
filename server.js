@@ -224,6 +224,20 @@ app.get('/api/user/info', authenticateToken, async (req, res) => {
   }
 });
 
+// Nouvelle route pour récupérer les contacts de l'utilisateur
+app.get('/api/user/contacts', authenticateToken, async (req, res) => {
+  try {
+    // Exemple simple : retourne tous les utilisateurs sauf l'utilisateur courant
+    const users = await prisma.user.findMany({
+      where: { id: { not: req.user.id } },
+      select: { id: true, email: true, firstName: true, lastName: true, photoUrl: true }
+    });
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur lors de la récupération des contacts', error: error.message });
+  }
+});
+
 // Route pour créer un consentement
 app.post('/api/consent', authenticateToken, validate(consentSchema), async (req, res) => {
   try {
