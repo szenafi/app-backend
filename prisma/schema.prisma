@@ -86,6 +86,9 @@ model Consent {
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
   notifications        Notification[] @relation("ConsentNotifications")
+  message              String?        // Ajouté pour wizard moderne
+  emoji                String?        // Ajouté pour wizard moderne
+  type                 String?        // Ajouté pour wizard moderne
 
   @@map("consent")
 }

@@ -106,6 +106,8 @@ const consentSchema = z.object({
   consentData: z.object({
     message: z.string(),
     dateTime: z.string().optional().nullable(), // Accepte null ou une string
+    emoji: z.string().optional(), // Ajouté pour wizard moderne
+    type: z.string().optional(),  // Ajouté pour wizard moderne
   }),
 });
 const packPaymentSchema = z.object({
@@ -228,18 +230,18 @@ app.post('/api/consent', authenticateToken, validate(consentSchema), async (req,
     const { partnerEmail, consentData } = req.body;
     const [partner, user, userPack] = await Promise.all([
       prisma.user.findUnique({ where: { email: partnerEmail }, select: { id: true } }),
-      prisma.user.findUnique({ where: { id: req.user.id }, select: { id: true, isSubscribed: true, firstName: true } }),
-      prisma.packConsentement.findUnique({ where: { userId: req.user.id }, select: { quantity: true } }),
+      prisma.user.findUnique({ where: { id: req.user.id } }),
+      prisma.packConsentement.findUnique({ where: { userId: req.user.id } }),
     ]);
-
-    if (!partner) return res.status(400).json({ message: 'Partenaire non trouvé' });
-    if (!user.isSubscribed && (!userPack || userPack.quantity < 1)) {
+    if (!partner) {
+      return res.status(404).json({ message: 'Partenaire non trouvé' });
+    }
+    if (!user.isSubscribed && (!userPack || userPack.quantity <= 0)) {
       return res.status(400).json({ message: 'Aucun consentement disponible' });
     }
-
     const paymentStatus = user.isSubscribed ? 'COMPLETED' : 'PENDING';
     const encryptedData = encrypt(JSON.stringify(consentData));
-
+    // Ajout des champs emoji et type dans la création du consentement
     const consent = await prisma.$transaction(async (tx) => {
       if (!user.isSubscribed && userPack) {
         await tx.packConsentement.update({
@@ -247,24 +249,20 @@ app.post('/api/consent', authenticateToken, validate(consentSchema), async (req,
           data: { quantity: userPack.quantity - 1 },
         });
       }
-      return tx.consent.create({
+      return await tx.consent.create({
         data: {
           userId: req.user.id,
           partnerId: partner.id,
+          data: encryptedData,
           status: 'PENDING',
-          encryptedData,
           paymentStatus,
-          initiatorConfirmed: true,
-          partnerConfirmed: false,
-          biometricValidated: false,
-          deletedByInitiator: false,
-          deletedByPartner: false,
-          archived: false,
+          message: consentData.message,
+          createdAt: consentData.dateTime ? new Date(consentData.dateTime) : new Date(),
+          emoji: consentData.emoji || null,
+          type: consentData.type || null,
         },
-        select: { id: true },
       });
     });
-
     await prisma.notification.create({
       data: {
         userId: partner.id,
@@ -274,7 +272,6 @@ app.post('/api/consent', authenticateToken, validate(consentSchema), async (req,
         isRead: false,
       },
     });
-
     res.status(201).json({ message: 'Consentement créé', consentId: consent.id });
   } catch (error) {
     console.error('Erreur consent:', error);
