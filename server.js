@@ -8,6 +8,7 @@ const { PrismaClient } = require('@prisma/client');
 const { z } = require('zod');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const CryptoJS = require('crypto-js');
+const { OAuth2Client } = require('google-auth-library');
 
 // Initialisation de l'application et Prisma
 const app = express();
@@ -186,6 +187,42 @@ app.post('/api/auth/login', validate(loginSchema), async (req, res) => {
     res.json({ token, user: { id: user.id, email: user.email, firstName: user.firstName ?? '', lastName: user.lastName ?? '' } });
   } catch (error) {
     console.error('Erreur lors de la connexion :', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+app.post('/api/auth/google', async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) {
+      return res.status(400).json({ message: 'Token Google manquant' });
+    }
+    const client = new OAuth2Client();
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID, // à définir dans .env
+    });
+    const payload = ticket.getPayload();
+    const { email, given_name, family_name, picture } = payload;
+    if (!email) {
+      return res.status(400).json({ message: 'Email Google non trouvé' });
+    }
+    let user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email,
+          firstName: given_name,
+          lastName: family_name,
+          photoUrl: picture,
+          password: '', // Pas de mot de passe pour Google
+        },
+      });
+    }
+    const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user });
+  } catch (error) {
+    console.error('Erreur Google login:', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
