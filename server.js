@@ -306,8 +306,10 @@ app.get('/api/user/contacts', authenticateToken, async (req, res) => {
 app.get('/api/user/search', authenticateToken, async (req, res) => {
   try {
     const { query } = req.query;
+    console.log('[RECHERCHE] Utilisateur connecté:', req.user.id, '| Query:', query);
+
     if (!query || typeof query !== 'string' || query.length < 2) {
-      return res.json([]); // Minimum 2 caractères sinon retourne vide
+      return res.json([]);
     }
     const results = await prisma.user.findMany({
       where: {
@@ -322,12 +324,14 @@ app.get('/api/user/search', authenticateToken, async (req, res) => {
       take: 15,
       orderBy: { firstName: 'asc' }
     });
+    console.log('[RECHERCHE] Résultats trouvés:', results.length);
     res.json(results);
   } catch (error) {
     console.error('Erreur recherche partenaire:', error);
     res.status(500).json({ message: 'Erreur lors de la recherche', error: error.message });
   }
 });
+
 
 // Route pour créer un consentement (sécurisée et champs forcés)
 app.post('/api/consent', authenticateToken, validate(consentSchema), async (req, res) => {
