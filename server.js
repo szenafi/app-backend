@@ -197,17 +197,23 @@ app.post('/api/auth/google', async (req, res) => {
     if (!idToken) {
       return res.status(400).json({ message: 'Token Google manquant' });
     }
-    const client = new OAuth2Client();
+
+    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
     const ticket = await client.verifyIdToken({
       idToken,
-      audience: process.env.GOOGLE_CLIENT_ID, // à définir dans .env
+      audience: process.env.GOOGLE_CLIENT_ID
     });
+
     const payload = ticket.getPayload();
     const { email, given_name, family_name, picture } = payload;
-    if (!email) {
-      return res.status(400).json({ message: 'Email Google non trouvé' });
-    }
-    let user = await prisma.user.findUnique({ where: { email } });
+
+    // Vérifier si l'utilisateur existe déjà
+    let user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, firstName: true, lastName: true }
+    });
+
+    // Si l'utilisateur n'existe pas, le créer
     if (!user) {
       user = await prisma.user.create({
         data: {
@@ -215,15 +221,32 @@ app.post('/api/auth/google', async (req, res) => {
           firstName: given_name,
           lastName: family_name,
           photoUrl: picture,
-          password: '', // Pas de mot de passe pour Google
+          password: '', // Pas de mot de passe pour les utilisateurs Google
+          googleId: payload.sub
         },
+        select: { id: true, email: true, firstName: true, lastName: true }
       });
     }
-    const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user });
+
+    // Générer le token JWT
+    const token = jwt.sign(
+      { id: user.id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName || '',
+        lastName: user.lastName || ''
+      }
+    });
   } catch (error) {
-    console.error('Erreur Google login:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+    console.error('Erreur authentification Google:', error);
+    res.status(500).json({ message: 'Erreur lors de l\'authentification Google', error: error.message });
   }
 });
 
@@ -272,6 +295,37 @@ app.get('/api/user/contacts', authenticateToken, async (req, res) => {
     res.json(users);
   } catch (error) {
     res.status(500).json({ message: 'Erreur lors de la récupération des contacts', error: error.message });
+  }
+});
+
+/**
+ * NOUVELLE ROUTE MODERNE DE RECHERCHE PARTENAIRE / AUTO-COMPLÉTION
+ * Recherche sur prénom, nom, email, max 15 résultats, insensible à la casse.
+ * Utilisable depuis le front pour search bar, auto-completion, etc.
+ */
+app.get('/api/user/search', authenticateToken, async (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query || typeof query !== 'string' || query.length < 2) {
+      return res.json([]); // Minimum 2 caractères sinon retourne vide
+    }
+    const results = await prisma.user.findMany({
+      where: {
+        id: { not: req.user.id },
+        OR: [
+          { firstName: { contains: query, mode: 'insensitive' } },
+          { lastName: { contains: query, mode: 'insensitive' } },
+          { email: { contains: query, mode: 'insensitive' } }
+        ]
+      },
+      select: { id: true, email: true, firstName: true, lastName: true, photoUrl: true },
+      take: 15,
+      orderBy: { firstName: 'asc' }
+    });
+    res.json(results);
+  } catch (error) {
+    console.error('Erreur recherche partenaire:', error);
+    res.status(500).json({ message: 'Erreur lors de la recherche', error: error.message });
   }
 });
 
@@ -484,9 +538,9 @@ app.put('/api/consent/:id/confirm-biometric', authenticateToken, async (req, res
       data: updateData,
     });
 
-    // Créer une notification pour l’autre partie
+    // Créer une notification pour l'autre partie
     const recipientId = isInitiator ? consent.partnerId : consent.userId;
-    const senderRole = isInitiator ? 'l’initiateur' : 'le partenaire';
+    const senderRole = isInitiator ? "l'initiateur" : "le partenaire";
     await prisma.notification.create({
       data: {
         userId: recipientId,
@@ -539,12 +593,12 @@ app.put('/api/notifications/mark-as-read', authenticateToken, async (req, res) =
   }
 });
 
-// Nouvelle route pour marquer les notifications comme lues (correspond à l’appel dans utils/api.js)
+// Nouvelle route pour marquer les notifications comme lues (correspond à l'appel dans utils/api.js)
 app.put('/api/notifications/mark-read', authenticateToken, async (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ message: 'Liste d’IDs de notifications invalide' });
+      return res.status(400).json({ message: "Liste d'IDs de notifications invalide" });
     }
     await prisma.notification.updateMany({
       where: {
